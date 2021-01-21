@@ -1,12 +1,19 @@
-const axios = require("axios");
-const axiosRetry = require("axios-retry");
-const PQueue = require("p-queue");
+import axios from "axios";
+import axiosRetry from "axios-retry";
+import PQueue from "p-queue";
 
-function create(url, tags, level, options) {
-  return new Logstash(url, tags, level, options);
+type Options = {
+  retryDelay: number;
+  concurrency: number;
+  maxMessagesPerSecond: number;
+  muteConsole: boolean;
+};
+
+function create(url: string, tags: Array<string>, level: string, options: Options) {
+  return Logstash(url, tags, level, options);
 }
 
-function Logstash(url, tags = [], level = "info", options = {}) {
+function Logstash(url: string, tags: Array<string> = [], level: string = "info", options: Options) {
   if (!url) {
     throw new TypeError("Invalid URL");
   }
@@ -34,19 +41,29 @@ function Logstash(url, tags = [], level = "info", options = {}) {
   });
 }
 
-Logstash.prototype._sendEvent = async function _sendEvent(event) {
+Logstash.prototype._sendEvent = async function _sendEvent(event: any) {
   return this.client({
     url: this.url,
     method: "POST",
     headers: { "Content-Type": "application/json" },
     data: event
-  }).catch(err =>
+  }).catch((err: { message: any; }) =>
     console.warn(`Could not send message to Logstash - [${err.message}]`)
   );
 };
 
-Logstash.prototype.log = function log(level, message, fields) {
-  const event = { level, fields, message };
+type Event = {
+  "@timestamp"?: string;
+  "@tags"?: string;
+  level: string;
+  fields: Array<string>;
+  message: string;
+  navigator?: any;
+  location?: any;
+};
+
+Logstash.prototype.log = function log(level: string, message: string, fields: any) {
+  const event: Event = { level, fields, message };
 
   event["@timestamp"] = new Date().toISOString();
   event["@tags"] = this.tags;
@@ -55,10 +72,10 @@ Logstash.prototype.log = function log(level, message, fields) {
   if (typeof navigator !== "undefined") {
     event.navigator = {
       cookieEnabled: navigator.cookieEnabled,
-      geoLocation: navigator.geoLocation,
+      geoLocation: navigator.geolocation,
       language: navigator.language,
       languages: navigator.languages,
-      online: navigator.online,
+      online: navigator.onLine,
       userAgent: navigator.userAgent,
       platform: navigator.platform,
       vendor: navigator.vendor
@@ -99,24 +116,24 @@ Logstash.prototype.log = function log(level, message, fields) {
   }
 };
 
-Logstash.prototype.debug = function debug(message, fields) {
+Logstash.prototype.debug = function debug(message: string, fields: any) {
   this.log("debug", message, fields);
 };
 
-Logstash.prototype.info = function info(message, fields) {
+Logstash.prototype.info = function info(message: string, fields: any) {
   this.log("info", message, fields);
 };
 
-Logstash.prototype.warn = function warn(message, fields) {
+Logstash.prototype.warn = function warn(message: string, fields: any) {
   this.log("warn", message, fields);
 };
 
-Logstash.prototype.error = function error(err, fields) {
+Logstash.prototype.error = function error(err: Error | any, fields: any) {
   if (err instanceof Error) {
-    this.log("error", err.message, Object.assign({ stack: err.stack }, fields));
+    this.log("error", err.message, {...fields, stack: err.stack });
   } else {
     this.log("error", err, fields);
   }
 };
 
-module.exports = create;
+export default create;
